@@ -325,7 +325,7 @@ dashboard(){
 
 stocks(){
   return `<div class="pagehead"><h1>Stocks</h1>
-  <div class="actions">${canWrite()?'<button class="btn primary" onclick="openEdit(null,\\'items\\')">+ Add Material</button>':''}</div></div>
+  <div class="actions">${canWrite()?'<button class="btn primary" onclick="openEdit(null,\'items\')">+ Add Material</button>':''}</div></div>
   <div class="panel"><div class="panelhead"><div class="toolbar"><input id="search" placeholder="Search material..." oninput="filterTable()"></div></div>
   <div class="tablewrap"><table id="stockTable"><thead><tr><th>Material</th><th>Unit</th><th>Stock</th><th>Min Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody>
   ${data.items.map(x=>{
@@ -343,7 +343,7 @@ delivered(){return transView("delivered","Delivered Items","Stock Out")},
 
 projects(){
   return `<div class="pagehead"><h1>Projects</h1>
-  <div class="actions">${canWrite()?'<button class="btn primary" onclick="openEdit(null,\\'projects\\')">+ Add Project</button>':''}</div></div>
+  <div class="actions">${canWrite()?'<button class="btn primary" onclick="openEdit(null,\'projects\')">+ Add Project</button>':''}</div></div>
   <div class="panel"><div class="tablewrap"><table><thead><tr><th>Project</th><th>Client</th><th>Status</th><th>Actions</th></tr></thead><tbody>
   ${data.projects.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.client)}</td><td>${esc(x.status||"Active")}</td>
   <td>${canWrite()?`<button class="btn secondary" data-edit="${esc(x.id)}" data-col="projects">Edit</button>
