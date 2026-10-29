@@ -1,0 +1,99 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isActiveUser() {
+      return signedIn() && userDoc().data.active == true;
+    }
+
+    function isAdmin() {
+      return isActiveUser() && userDoc().data.role == 'admin';
+    }
+
+    function isStaff() {
+      return isActiveUser() &&
+        (userDoc().data.role == 'staff' || userDoc().data.role == 'admin');
+    }
+
+    function isViewer() {
+      return isActiveUser() &&
+        (userDoc().data.role == 'viewer' ||
+         userDoc().data.role == 'staff' ||
+         userDoc().data.role == 'admin');
+    }
+
+    match /users/{userId} {
+      allow read: if isAdmin() ||
+        (signedIn() && request.auth.uid == userId);
+
+      // New self-registered accounts are automatically created as pending users.
+      // Only an administrator can assign a real application role and activate them.
+      allow create: if isAdmin() ||
+        (signedIn() && request.auth.uid == userId &&
+         request.resource.data.role == 'user' &&
+         request.resource.data.active == false &&
+         request.resource.data.email == request.auth.token.email);
+
+      allow update: if isAdmin() ||
+        (
+          signedIn() &&
+          request.auth.uid == userId &&
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.active == resource.data.active
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    match /items/{itemId} {
+      allow read: if isViewer();
+      allow create, update, delete: if isStaff();
+    }
+
+    match /received/{recordId} {
+      allow read: if isViewer();
+      allow create, update, delete: if isStaff();
+    }
+
+    match /delivered/{recordId} {
+      allow read: if isViewer();
+      allow create, update, delete: if isStaff();
+    }
+
+    match /projects/{projectId} {
+      allow read: if isViewer();
+      allow create, update, delete: if isStaff();
+    }
+
+    match /reqs/{requestId} {
+      allow create: if isActiveUser();
+      allow read: if isAdmin() ||
+        (signedIn() && resource.data.userId == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
+    match /audit/{auditId} {
+      allow read: if isAdmin();
+      allow create: if isActiveUser();
+      allow update, delete: if isAdmin();
+    }
+
+    match /meta/{docId} {
+      allow read: if isViewer();
+      allow write: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
