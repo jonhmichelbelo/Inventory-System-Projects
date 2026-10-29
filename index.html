@@ -38,8 +38,10 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.hidden{display:
     <div class="field"><label>Email</label><input id="email" type="email" autocomplete="username"></div>
     <div class="field"><label>Password</label><input id="password" type="password" autocomplete="current-password"></div>
     <button id="loginBtn" class="btn primary" style="width:100%">Sign in</button>
+    <button id="createBtn" class="btn secondary" style="width:100%;margin-top:9px">Create account</button>
     <div id="authError" class="error" style="margin-top:10px"></div>
-    <div class="notice" style="margin-top:14px">Your Firebase Authentication account must also have an active profile in the Firestore <b>users</b> collection.</div>
+    <div id="signupNote" class="notice hidden" style="margin-top:14px">New accounts are automatically added as <b>User</b>. An administrator must assign the user's role before access is granted.</div>
+    <div class="notice" style="margin-top:14px">Your account is created automatically in the Firestore <b>users</b> collection. An administrator must assign your role before you can access the inventory.</div>
   </div>
 </div>
 
@@ -114,23 +116,45 @@ async function authPost(path,body){
 async function login(){
   $("authError").textContent="";
   try{
-    const j=await authPost(":signInWithPassword",{
-      email:$("email").value.trim(),
-      password:$("password").value,
-      returnSecureToken:true
-    });
+    const email=$("email").value.trim();
+    const password=$("password").value;
+    if(!email||!password)throw new Error("Enter your email and password.");
+    const j=await authPost(":signInWithPassword",{email,password,returnSecureToken:true});
     token=j.idToken;
     refreshToken=j.refreshToken;
     localStorage.setItem("rpi_refresh_token",refreshToken);
     await loadMe(j.localId);
-    if(!me)throw new Error("Your account has no active Firestore user profile.");
-    if(me.active!==true)throw new Error("Your inventory account is inactive.");
+    if(!me)throw new Error("Login succeeded, but your Firestore user profile is missing. Ask an administrator to create/approve your profile.");
+    if(me.active!==true || !["admin","staff","viewer"].includes(me.role))throw new Error("Your account is waiting for an administrator to assign a role.");
     await playLoginTransition();
     showApp();
     await loadAll();
     startPolling();
   }catch(e){
     $("authError").textContent=e.message||String(e);
+  }
+}
+
+async function createAccount(){
+  $("authError").textContent="";
+  const email=$("email").value.trim();
+  const password=$("password").value;
+  if(!email||!password){$("authError").textContent="Enter an email and password first.";return}
+  if(password.length<6){$("authError").textContent="Password must be at least 6 characters.";return}
+  if(!confirm("Create a new inventory account for "+email+"?"))return;
+  try{
+    const j=await authPost(":signUp",{email,password,returnSecureToken:true});
+    token=j.idToken;
+    refreshToken=j.refreshToken;
+    localStorage.setItem("rpi_refresh_token",refreshToken);
+    await put("users",j.localId,{email,role:"user",active:false,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+    $("signupNote").classList.remove("hidden");
+    $("authError").textContent="Account created. An administrator must activate your account before you can sign in.";
+    token=null;refreshToken=null;me=null;
+    localStorage.removeItem("rpi_refresh_token");
+  }catch(e){
+    const msg=e.message||String(e);
+    $("authError").textContent=msg.includes("EMAIL_EXISTS")?"An account with this email already exists.":msg;
   }
 }
 
@@ -333,7 +357,7 @@ users(){
   return `<div class="pagehead"><h1>Users</h1></div>
   <div class="notice">Firebase Authentication accounts are created separately. After creating an account, create its Firestore profile here using the Firebase Auth UID as the document ID.</div>
   <div class="panel"><div class="tablewrap"><table><thead><tr><th>Email</th><th>Role</th><th>Active</th><th>UID</th><th>Actions</th></tr></thead><tbody>
-  ${data.users.map(x=>`<tr><td>${esc(x.email)}</td><td>${esc(x.role)}</td><td>${x.active?"Yes":"No"}</td><td><code>${esc(x.id)}</code></td>
+  ${data.users.map(x=>`<tr><td>${esc(x.email)}</td><td>${esc(x.role)}</td><td>${x.active?"Yes":(x.role==="user"?"Pending":"No")}</td><td><code>${esc(x.id)}</code></td>
   <td><button class="btn secondary" data-edit="${esc(x.id)}" data-col="users">Edit</button></td></tr>`).join("")||
   '<tr><td colspan="5" class="empty">No user profiles.</td></tr>'}
   </tbody></table></div></div>`;
@@ -404,6 +428,7 @@ function openEdit(docId,col){
         <option ${old?.role==="admin"?"selected":""}>admin</option>
         <option ${old?.role==="staff"?"selected":""}>staff</option>
         <option ${old?.role==="viewer"?"selected":""}>viewer</option>
+        <option ${old?.role==="user"?"selected":""}>user</option>
       </select></div>
       <div class="field"><label>Active</label><select id="f_active">
         <option value="true" ${old?.active!==false?"selected":""}>Yes</option>
@@ -531,6 +556,7 @@ async function removeRecord(docId,col){
 }
 
 $("loginBtn").onclick=login;
+$("createBtn").onclick=createAccount;
 $("password").addEventListener("keydown",e=>{if(e.key==="Enter")login()});
 $("logoutBtn").onclick=logout;
 document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>nav(b.dataset.tab));
